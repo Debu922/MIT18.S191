@@ -22,10 +22,13 @@ end
 # ╔═╡ a4937996-f314-11ea-2ff9-615c888afaa8
 begin
 	Pkg.add([
+			"Images",
 			"ImageMagick",
 			"Compose",
+			"ImageFiltering",
 			"TestImages",
 			"Statistics",
+			"PlutoUI",
 			"BenchmarkTools"
 			])
 
@@ -33,6 +36,7 @@ begin
 	using TestImages
 	using ImageFiltering
 	using Statistics
+	using PlutoUI
 	using BenchmarkTools
 end
 
@@ -265,9 +269,11 @@ md"""We provide you with a convolve function below.
 """
 
 # ╔═╡ d184e9cc-f318-11ea-1a1e-994ab1330c1a
-convolve(img, k) = imfilter(img, reflect(k)) # uses ImageFiltering.jl package
-# behaves the same way as the `convolve` function used in Lecture 2
-# You were asked to implement this in homework 1.
+begin
+	convolve(img, k) = imfilter(img, reflect(k)) # uses ImageFiltering.jl package
+	# behaves the same way as the `convolve` function used in Lecture 2
+	# You were asked to implement this in homework 1.
+end
 
 # ╔═╡ cdfb3508-f319-11ea-1486-c5c58a0b9177
 float_to_color(x) = RGB(max(0, -x), max(0, x), 0)
@@ -518,18 +524,24 @@ You are expected to read and understand the [documentation on dictionaries](http
 
 # ╔═╡ b1d09bc8-f320-11ea-26bb-0101c9a204e2
 function memoized_least_energy(energies, i, j, memory)
-	m, n = size(energies)
-	if i == m
-		return energies[Int(i), Int(j)]
+	col_row, col_column = size(energies)
+	
+	# Replace the following line with your code.
+	# [starting_pixel for i=1:m]
+	if i == col_row
+		return energies[i, j]
 	end
-	if haskey(memory,(i,j))
-		least_energy = memory[(i,j)]
-		return least_energy
-	end
-	l, r = max(1, j - 1), min(size(energies, 2), j + 1)
+		
+	if (i, j) in keys(memory)
+		return memory[(i, j)]
+	else
+	# induction: combine results from recursive calls to `memoized_least_energy`
+	# finding indices of column to the left and right (subject to boundary conditions)
+		l, r = max(1, j - 1), min(size(energies, 2), j + 1)
 		memory[(i, j)] = energies[i, j] + 
 			minimum([memoized_least_energy(energies, i + 1, k, memory) for k=l:r])
 		return memory[(i, j)]
+	end
 end
 
 # ╔═╡ 3e8b0868-f3bd-11ea-0c15-011bbd6ac051
@@ -538,14 +550,23 @@ function recursive_memoized_seam(energies, starting_pixel)
 	                                         # pass this every time you call memoized_least_energy.
 	m, n = size(energies)
 	
-	seam = zeros(Int,n)
+	# Replace the following line with your code.
+	# [rand(1:starting_pixel) for i=1:m]
+	
+	seam = zeros(Int, m)
 	seam[1] = starting_pixel
 	for i in 2:m
-		j = seam[i-1]
-		_,seam[i] = findmin([memoized_least_energy(energies,i,p,memory) for p in clamp(j-1, 1, n):clamp(j+1, 1, n)])
-		seam[i] = clamp(seam[i]-2+seam[i-1],1,n)
+		j = seam[i - 1]  # previous seam pixel
+		# indices of column to the left and right (subject to boundary conditions)
+		l, r = max(1, j - 1), min(n, j + 1)
+		# own version of argmin that takes a function defined in Helper Functions
+ 		dir = argmin([memoized_least_energy(energies, i, k, memory) for k=l:r])
+		# more expensive, Base-supported implementation requires allocs:
+# 			dir = argmin(memoized_least_energy.(Ref(energies), i, l:r, Ref(memory)))
+		# updating seam
+		seam[i] = l + dir - 1
 	end
-	seam
+	return seam
 end
 
 # ╔═╡ 4e3bcf88-f3c5-11ea-3ada-2ff9213647b7
@@ -673,19 +694,22 @@ end
 
 # ╔═╡ 437ba6ce-f37d-11ea-1010-5f6a6e282f9b
 function shrink_n(img, n, min_seam, imgs=[]; show_lightning=true)
-	n==0 && return push!(imgs, img)
+    n==0 && return push!(imgs, img)
 
-	e = energy(img)
-	seam_energy(seam) = sum(e[i, seam[i]]  for i in 1:size(img, 1))
-	_, min_j = findmin(map(j->seam_energy(min_seam(e, j)), 1:size(e, 2)))
-	min_seam_vec = min_seam(e, min_j)
-	img′ = remove_in_each_row(img, min_seam_vec)
-	if show_lightning
-		push!(imgs, mark_path(img, min_seam_vec))
-	else
-		push!(imgs, img′)
-	end
-	shrink_n(img′, n-1, min_seam, imgs)
+    e = energy(img)
+    begin
+        local memory = Dict{Tuple{Int,Int}, Float64}()
+        seam_energy(seam) = sum(e[i, seam[i]]  for i in 1:size(img, 1))
+        _, min_j = findmin(map(j->seam_energy(min_seam(e, j, memory)), 1:size(e, 2)))
+        min_seam_vec = min_seam(e, min_j, memory)
+        img′ = remove_in_each_row(img, min_seam_vec)
+        if show_lightning
+            push!(imgs, mark_path(img, min_seam_vec))
+        else
+            push!(imgs, img′)
+        end
+    end
+    shrink_n(img′, n-1, min_seam, imgs)
 end
 
 # ╔═╡ f6571d86-f388-11ea-0390-05592acb9195
@@ -896,9 +920,9 @@ bigbreak
 # ╟─85cfbd10-f384-11ea-31dc-b5693630a4c5
 # ╠═33e43c7c-f381-11ea-3abc-c942327456b1
 # ╟─938185ec-f384-11ea-21dc-b56b7469f798
-# ╟─86e1ee96-f314-11ea-03f6-0f549b79e7c9
+# ╠═86e1ee96-f314-11ea-03f6-0f549b79e7c9
 # ╠═a4937996-f314-11ea-2ff9-615c888afaa8
-# ╟─0d144802-f319-11ea-0028-cd97a776a3d0
+# ╠═0d144802-f319-11ea-0028-cd97a776a3d0
 # ╟─cc9fcdae-f314-11ea-1b9a-1f68b792f005
 # ╟─b49a21a6-f381-11ea-1a98-7f144c55c9b7
 # ╟─b49e8cc8-f381-11ea-1056-91668ac6ae4e
@@ -948,8 +972,8 @@ bigbreak
 # ╠═abf20aa0-f31b-11ea-2548-9bea4fab4c37
 # ╟─5430d772-f397-11ea-2ed8-03ee06d02a22
 # ╟─f580527e-f397-11ea-055f-bb9ea8f12015
-# ╟─6f52c1a2-f395-11ea-0c8a-138a77f03803
-# ╟─2a7e49b8-f395-11ea-0058-013e51baa554
+# ╠═6f52c1a2-f395-11ea-0c8a-138a77f03803
+# ╠═2a7e49b8-f395-11ea-0058-013e51baa554
 # ╠═7ddee6fc-f394-11ea-31fc-5bd665a65bef
 # ╠═980b1104-f394-11ea-0948-21002f26ee25
 # ╟─9945ae78-f395-11ea-1d78-cf6ad19606c8
@@ -964,7 +988,7 @@ bigbreak
 # ╠═73b52fd6-f3b9-11ea-14ed-ebfcab1ce6aa
 # ╠═8ec27ef8-f320-11ea-2573-c97b7b908cb7
 # ╟─9f18efe2-f38e-11ea-0871-6d7760d0b2f6
-# ╟─a7f3d9f8-f3bb-11ea-0c1a-55bbb8408f09
+# ╠═a7f3d9f8-f3bb-11ea-0c1a-55bbb8408f09
 # ╠═fa8e2772-f3b6-11ea-30f7-699717693164
 # ╟─18e0fd8a-f3bc-11ea-0713-fbf74d5fa41a
 # ╟─cbf29020-f3ba-11ea-2cb0-b92836f3d04b
@@ -985,7 +1009,7 @@ bigbreak
 # ╟─cf39fa2a-f374-11ea-0680-55817de1b837
 # ╠═c8724b5e-f3bd-11ea-0034-b92af21ca12d
 # ╠═be7d40e2-f320-11ea-1b56-dff2a0a16e8d
-# ╟─507f3870-f3c5-11ea-11f6-ada3bb087634
+# ╠═507f3870-f3c5-11ea-11f6-ada3bb087634
 # ╠═50829af6-f3c5-11ea-04a8-0535edd3b0aa
 # ╠═9e56ecfa-f3c5-11ea-2e90-3b1839d12038
 # ╟─4f48c8b8-f39d-11ea-25d2-1fab031a514f
@@ -1002,16 +1026,16 @@ bigbreak
 # ╟─48089a00-f321-11ea-1479-e74ba71df067
 # ╟─6b4d6584-f3be-11ea-131d-e5bdefcc791b
 # ╠═437ba6ce-f37d-11ea-1010-5f6a6e282f9b
-# ╟─ef88c388-f388-11ea-3828-ff4db4d1874e
-# ╟─ef26374a-f388-11ea-0b4e-67314a9a9094
-# ╟─6bdbcf4c-f321-11ea-0288-fb16ff1ec526
-# ╟─ffc17f40-f380-11ea-30ee-0fe8563c0eb1
-# ╟─ffc40ab2-f380-11ea-2136-63542ff0f386
-# ╟─ffceaed6-f380-11ea-3c63-8132d270b83f
-# ╟─ffde44ae-f380-11ea-29fb-2dfcc9cda8b4
-# ╟─ffe326e0-f380-11ea-3619-61dd0592d409
-# ╟─fff5aedc-f380-11ea-2a08-99c230f8fa32
-# ╟─00026442-f381-11ea-2b41-bde1fff66011
-# ╟─fbf6b0fa-f3e0-11ea-2009-573a218e2460
+# ╠═ef88c388-f388-11ea-3828-ff4db4d1874e
+# ╠═ef26374a-f388-11ea-0b4e-67314a9a9094
+# ╠═6bdbcf4c-f321-11ea-0288-fb16ff1ec526
+# ╠═ffc17f40-f380-11ea-30ee-0fe8563c0eb1
+# ╠═ffc40ab2-f380-11ea-2136-63542ff0f386
+# ╠═ffceaed6-f380-11ea-3c63-8132d270b83f
+# ╠═ffde44ae-f380-11ea-29fb-2dfcc9cda8b4
+# ╠═ffe326e0-f380-11ea-3619-61dd0592d409
+# ╠═fff5aedc-f380-11ea-2a08-99c230f8fa32
+# ╠═00026442-f381-11ea-2b41-bde1fff66011
+# ╠═fbf6b0fa-f3e0-11ea-2009-573a218e2460
 # ╟─256edf66-f3e1-11ea-206e-4f9b4f6d3a3d
-# ╟─00115b6e-f381-11ea-0bc6-61ca119cb628
+# ╠═00115b6e-f381-11ea-0bc6-61ca119cb628
