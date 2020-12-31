@@ -22,13 +22,10 @@ end
 # ╔═╡ a4937996-f314-11ea-2ff9-615c888afaa8
 begin
 	Pkg.add([
-			"Images",
 			"ImageMagick",
 			"Compose",
-			"ImageFiltering",
 			"TestImages",
 			"Statistics",
-			"PlutoUI",
 			"BenchmarkTools"
 			])
 
@@ -36,7 +33,6 @@ begin
 	using TestImages
 	using ImageFiltering
 	using Statistics
-	using PlutoUI
 	using BenchmarkTools
 end
 
@@ -67,7 +63,7 @@ student = (name = "Debaditya Bhattacharya", kerberos_id = "debbh")
 # ╔═╡ ec66314e-f37f-11ea-0af4-31da0584e881
 md"""
 
-Submission by: **_$(student.name)_** ($(student.kerberos_id)@mit.edu)
+Submission by: **_$(student.name)_** ($(student.kerberos_id)@iitk.ac.in)
 """
 
 # ╔═╡ 938185ec-f384-11ea-21dc-b56b7469f798
@@ -428,9 +424,10 @@ function least_energy(energies, i, j)
 	end
 	#
 	# induction
-	e, j′ = findmin([least_energy(energies,i+1,p)[2] for p in clamp(j-1, 1, size(energies)[2]):clamp(j+1, 1, size(energies)[2])])
-	@show ([least_energy(energies,i+1,p)[2] for p in clamp(j-1, 1, size(energies)[2]):clamp(j+1, 1, size(energies)[2])])
-	return (energies[i,j] + e,j-1 +j′)
+	x = [least_energy(energies,i+1,p)[1] for p in clamp(j-1, 1, size(energies)[2]):clamp(j+1, 1, size(energies)[2])]
+	e, j′= findmin(x)
+	j′ -=2
+	return (energies[i,j] + e, clamp(j+j′,1,size(energies)[2]))
 	# combine results from recursive calls to `least_energy`.
 end
 
@@ -522,9 +519,17 @@ You are expected to read and understand the [documentation on dictionaries](http
 # ╔═╡ b1d09bc8-f320-11ea-26bb-0101c9a204e2
 function memoized_least_energy(energies, i, j, memory)
 	m, n = size(energies)
-	
-	# Replace the following line with your code.
-	[starting_pixel for i=1:m]
+	if i == m
+		return energies[Int(i), Int(j)]
+	end
+	if haskey(memory,(i,j))
+		least_energy = memory[(i,j)]
+		return least_energy
+	end
+	l, r = max(1, j - 1), min(size(energies, 2), j + 1)
+		memory[(i, j)] = energies[i, j] + 
+			minimum([memoized_least_energy(energies, i + 1, k, memory) for k=l:r])
+		return memory[(i, j)]
 end
 
 # ╔═╡ 3e8b0868-f3bd-11ea-0c15-011bbd6ac051
@@ -533,8 +538,14 @@ function recursive_memoized_seam(energies, starting_pixel)
 	                                         # pass this every time you call memoized_least_energy.
 	m, n = size(energies)
 	
-	# Replace the following line with your code.
-	[rand(1:starting_pixel) for i=1:m]
+	seam = zeros(Int,n)
+	seam[1] = starting_pixel
+	for i in 2:m
+		j = seam[i-1]
+		_,seam[i] = findmin([memoized_least_energy(energies,i,p,memory) for p in clamp(j-1, 1, n):clamp(j+1, 1, n)])
+		seam[i] = clamp(seam[i]-2+seam[i-1],1,n)
+	end
+	seam
 end
 
 # ╔═╡ 4e3bcf88-f3c5-11ea-3ada-2ff9213647b7
@@ -584,7 +595,20 @@ Now it's easy to see that the above algorithm is equivalent to one that populate
 
 # ╔═╡ ff055726-f320-11ea-32f6-2bf38d7dd310
 function least_energy_matrix(energies)
-	copy(energies)
+	m,n = size(energies)
+	energy_map = zeros(size(energies))
+	energy_map[end, :] = energies[end, :]
+	
+	for i in m-1:-1:1
+		for j in 1:n
+			sw = energy_map[i+1, clamp(j-1, 1, n)]
+			sm = energy_map[i+1, j]
+			se = energy_map[i+1, clamp(j+1, 1, n)]
+			energy_map[i, j] += findmin([sw, sm, se])[1]
+		end
+	end
+	
+	return energy_map
 end
 
 # ╔═╡ 92e19f22-f37b-11ea-25f7-e321337e375e
@@ -600,7 +624,21 @@ function seam_from_precomputed_least_energy(energies, starting_pixel::Int)
 	m, n = size(least_energies)
 	
 	# Replace the following line with your code.
-	[starting_pixel for i=1:m]
+	# [starting_pixel for i=1:m]
+	
+	energy_map = least_energy_matrix(energies)
+	
+	seam = zeros(Int, m)
+	seam[1] = starting_pixel
+	
+	for i in 2:m
+		j = seam[i-1]
+		sw = energy_map[i, clamp(j-1, 1, n)]
+		sm = energy_map[i, j]
+		se = energy_map[i, clamp(j+1, 1, n)]
+		seam[i] = findmin([sw, sm, se])[2]
+	end
+	return seam
 end
 
 # ╔═╡ 51df0c98-f3c5-11ea-25b8-af41dc182bac
@@ -718,9 +756,6 @@ if compute_access
 	x,y=least_energy(tracked, 1,7)
 	tracked.accesses[]
 end
-
-# ╔═╡ 6cff6000-4a65-11eb-30ff-d5767f6ca990
-x,y
 
 # ╔═╡ d88bc272-f392-11ea-0efd-15e0e2b2cd4e
 if shrink_recursive
@@ -862,7 +897,7 @@ bigbreak
 # ╠═33e43c7c-f381-11ea-3abc-c942327456b1
 # ╟─938185ec-f384-11ea-21dc-b56b7469f798
 # ╟─86e1ee96-f314-11ea-03f6-0f549b79e7c9
-# ╟─a4937996-f314-11ea-2ff9-615c888afaa8
+# ╠═a4937996-f314-11ea-2ff9-615c888afaa8
 # ╟─0d144802-f319-11ea-0028-cd97a776a3d0
 # ╟─cc9fcdae-f314-11ea-1b9a-1f68b792f005
 # ╟─b49a21a6-f381-11ea-1a98-7f144c55c9b7
@@ -931,7 +966,6 @@ bigbreak
 # ╟─9f18efe2-f38e-11ea-0871-6d7760d0b2f6
 # ╟─a7f3d9f8-f3bb-11ea-0c1a-55bbb8408f09
 # ╠═fa8e2772-f3b6-11ea-30f7-699717693164
-# ╠═6cff6000-4a65-11eb-30ff-d5767f6ca990
 # ╟─18e0fd8a-f3bc-11ea-0713-fbf74d5fa41a
 # ╟─cbf29020-f3ba-11ea-2cb0-b92836f3d04b
 # ╟─8bc930f0-f372-11ea-06cb-79ced2834720
@@ -967,7 +1001,7 @@ bigbreak
 # ╟─0fbe2af6-f381-11ea-2f41-23cd1cf930d9
 # ╟─48089a00-f321-11ea-1479-e74ba71df067
 # ╟─6b4d6584-f3be-11ea-131d-e5bdefcc791b
-# ╟─437ba6ce-f37d-11ea-1010-5f6a6e282f9b
+# ╠═437ba6ce-f37d-11ea-1010-5f6a6e282f9b
 # ╟─ef88c388-f388-11ea-3828-ff4db4d1874e
 # ╟─ef26374a-f388-11ea-0b4e-67314a9a9094
 # ╟─6bdbcf4c-f321-11ea-0288-fb16ff1ec526
