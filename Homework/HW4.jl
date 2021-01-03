@@ -21,12 +21,16 @@ end
 
 # ╔═╡ 15187690-0403-11eb-2dfd-fd924faa3513
 begin
-	Pkg.add(["Plots", "PlutoUI",])
+	Pkg.add(["Plots", "PlutoUI","BenchmarkTools"])
 
 	using Plots
 	plotly()
 	using PlutoUI
+	using BenchmarkTools
 end
+
+# ╔═╡ 87284448-4d8b-11eb-2e3a-3d3243d5c48d
+using Statistics
 
 # ╔═╡ 01341648-0403-11eb-2212-db450c299f35
 md"_homework 4, version 1_"
@@ -694,13 +698,42 @@ function repeat_simulations(N, T, infection, num_simulations)
 	end
 end
 
-# ╔═╡ 80c2cd88-04b1-11eb-326e-0120a39405ea
-simulations = repeat_simulations(100, 1000, InfectionRecovery(0.02, 0.002), 20)
-
 # ╔═╡ 80e6f1e0-04b1-11eb-0d4e-475f1d80c2bb
 md"""
 In the cell below, we plot the evolution of the number of $I$ individuals as a function of time for each of the simulations on the same plot using transparency (`alpha=0.5` inside the plot command).
 """
+
+# ╔═╡ 95c598d4-0403-11eb-2328-0175ed564915
+md"""
+👉 Write a function `sir_mean_plot` that returns a plot of the means of $S$, $I$ and $R$ as a function of time on a single graph.
+"""
+
+# ╔═╡ 843fd63c-04d0-11eb-0113-c58d346179d6
+function sir_mean_plot(simulations::Vector{<:NamedTuple})
+	# you might need T for this function, here's a trick to get it:
+	T = length(first(simulations).S)
+	S_mean = mean([simulation.S for simulation in simulations])
+	I_mean = mean([simulation.I for simulation in simulations])
+	R_mean = mean([simulation.R for simulation in simulations])
+	p = plot(1:T,S_mean,label="S_mean")
+	plot!(p,1:T,I_mean,label="I_mean")
+	plot!(p,1:T,R_mean,label="R_mean")
+	return p
+end
+
+# ╔═╡ dfb99ace-04cf-11eb-0739-7d694c837d59
+md"""
+👉 Allow $p_\text{infection}$ and $p_\text{recovery}$ to be changed interactively and find parameter values for which you observe an epidemic outbreak.
+"""
+
+# ╔═╡ 1c6aa208-04d1-11eb-0b87-cf429e6ff6d0
+@bind p_infection Slider(0.01:0.01:1, show_value=true)
+
+# ╔═╡ 926e62a0-4d88-11eb-1f2c-e9fa91fd0853
+@bind p_recovery Slider(0.001:0.001:1, show_value = true)
+
+# ╔═╡ 80c2cd88-04b1-11eb-326e-0120a39405ea
+simulations = repeat_simulations(100, 1000, InfectionRecovery(p_infection, p_recovery), 20)
 
 # ╔═╡ 9cd2bb00-04b1-11eb-1d83-a703907141a7
 let
@@ -713,29 +746,8 @@ let
 	p
 end
 
-# ╔═╡ 95c598d4-0403-11eb-2328-0175ed564915
-md"""
-👉 Write a function `sir_mean_plot` that returns a plot of the means of $S$, $I$ and $R$ as a function of time on a single graph.
-"""
-
-# ╔═╡ 843fd63c-04d0-11eb-0113-c58d346179d6
-function sir_mean_plot(simulations::Vector{<:NamedTuple})
-	# you might need T for this function, here's a trick to get it:
-	T = length(first(simulations).S)
-	
-	return missing
-end
-
-# ╔═╡ 7f635722-04d0-11eb-3209-4b603c9e843c
-sir_mean_plot(simulations)
-
-# ╔═╡ dfb99ace-04cf-11eb-0739-7d694c837d59
-md"""
-👉 Allow $p_\text{infection}$ and $p_\text{recovery}$ to be changed interactively and find parameter values for which you observe an epidemic outbreak.
-"""
-
-# ╔═╡ 1c6aa208-04d1-11eb-0b87-cf429e6ff6d0
-
+# ╔═╡ 52cb3568-4d8c-11eb-1f17-3528d220428d
+# @benchmark sir_mean_error_plot(simulations)
 
 # ╔═╡ 95eb9f88-0403-11eb-155b-7b2d3a07cff0
 md"""
@@ -748,9 +760,23 @@ This should confirm that the distribution of $I$ at each step is pretty wide!
 function sir_mean_error_plot(simulations::Vector{<:NamedTuple})
 	# you might need T for this function, here's a trick to get it:
 	T = length(first(simulations).S)
+	T = length(first(simulations).S)
+	S_mean = mean([simulation.S for simulation in simulations])
+	I_mean = mean([simulation.I for simulation in simulations])
+	R_mean = mean([simulation.R for simulation in simulations])
 	
-	return missing
+	S_std = std([simulation.S for simulation in simulations])
+	I_std = std([simulation.I for simulation in simulations])
+	R_std = std([simulation.R for simulation in simulations])
+	
+	p = plot(1:T,S_mean,ribbon=S_std,fillalpha=0.2,label="S_mean")
+	plot!(p,1:T,I_mean,ribbon=I_std,fillalpha=0.2,label="I_mean")
+	plot!(p,1:T,R_mean,ribbon=R_std,fillalpha=0.2,label="R_mean")
+	return p
 end
+
+# ╔═╡ 7f635722-04d0-11eb-3209-4b603c9e843c
+sir_mean_error_plot(simulations)
 
 # ╔═╡ 9611ca24-0403-11eb-3582-b7e3bb243e62
 md"""
@@ -760,9 +786,6 @@ md"""
 
 """
 
-# ╔═╡ 26e2978e-0435-11eb-0d61-25f552d2771e
-
-
 # ╔═╡ 9635c944-0403-11eb-3982-4df509f6a556
 md"""
 #### Exercse 3.4
@@ -771,7 +794,11 @@ md"""
 """
 
 # ╔═╡ 4ad11052-042c-11eb-3643-8b2b3e1269bc
-
+md"""
+* Time taken to infect all people or to infection to go away
+* Maximum number of infected people at any given time
+* 
+"""
 
 # ╔═╡ 61c00724-0403-11eb-228d-17c11670e5d1
 md"""
@@ -1216,12 +1243,14 @@ bigbreak
 # ╟─95c598d4-0403-11eb-2328-0175ed564915
 # ╠═843fd63c-04d0-11eb-0113-c58d346179d6
 # ╠═7f635722-04d0-11eb-3209-4b603c9e843c
-# ╟─dfb99ace-04cf-11eb-0739-7d694c837d59
+# ╠═dfb99ace-04cf-11eb-0739-7d694c837d59
 # ╠═1c6aa208-04d1-11eb-0b87-cf429e6ff6d0
+# ╠═926e62a0-4d88-11eb-1f2c-e9fa91fd0853
+# ╠═52cb3568-4d8c-11eb-1f17-3528d220428d
 # ╟─95eb9f88-0403-11eb-155b-7b2d3a07cff0
+# ╠═87284448-4d8b-11eb-2e3a-3d3243d5c48d
 # ╠═287ee7aa-0435-11eb-0ca3-951dbbe69404
 # ╟─9611ca24-0403-11eb-3582-b7e3bb243e62
-# ╠═26e2978e-0435-11eb-0d61-25f552d2771e
 # ╟─9635c944-0403-11eb-3982-4df509f6a556
 # ╠═4ad11052-042c-11eb-3643-8b2b3e1269bc
 # ╟─61c00724-0403-11eb-228d-17c11670e5d1
