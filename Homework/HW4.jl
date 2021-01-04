@@ -895,7 +895,6 @@ md"""
 
 # ╔═╡ 21c50840-0435-11eb-1307-7138ecde0691
 let
-	
 	plot(1:1000,mean([sim.I for sim in simulations_2]),label="avg")
 end
 
